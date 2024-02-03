@@ -3,9 +3,9 @@ import datetime as dt
 import pandas as pd
 import ta
 
-# Replace 'your_username' and 'your_password' with your actual Robinhood credentials
-username = 'bat9440@nyu.edu'
-password = 'Searglobe85252!'
+# Replace 'email' and 'password' with your actual Robinhood credentials
+username = 'email'
+password = 'password'
 
 def login(days = 1):
     # Logging in
