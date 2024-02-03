@@ -2,10 +2,13 @@ import robin_stocks.robinhood as rh
 import datetime as dt
 import pandas as pd
 import ta
+from alpha_vantage.timeseries import TimeSeries
+from alpha_vantage.techindicators import TechIndicators
+from scipy.signal import find_peaks
 
-# Replace 'email' and 'password' with your actual Robinhood credentials
-username = 'email'
-password = 'password'
+# Replace 'your_username' and 'your_password' with your actual Robinhood credentials
+username = 'bat9440@nyu.edu'
+password = 'Searglobe85252!'
 
 def login(days = 1):
     # Logging in
@@ -125,8 +128,8 @@ class Stock:
         rsi_value = self.get_rsi(df_historical_prices)
         
         # Adjust the threshold values based on your strategy
-        overbought_threshold = 70
-        oversold_threshold = 30
+        overbought_threshold = 11
+        oversold_threshold = 9
 
         if rsi_value is not None:
             if rsi_value > overbought_threshold:
@@ -140,9 +143,92 @@ class Stock:
         else:
             return "Not enough data for RSI calculation."
         
+    def get_alpha_vantage_data(self, symbol, interval='1min', output_size='full'):
+        # Replace 'your_alpha_vantage_api_key' with your actual Alpha Vantage API key
+        alpha_vantage_api_key = 'ETLHACFHFGR28X9G'
+        ts = TimeSeries(key=alpha_vantage_api_key, output_format='pandas')
+        data, meta_data = ts.get_intraday(symbol=symbol, interval=interval, outputsize=output_size)
+
+        return data
+
+    def calculate_long_volume(self, symbol, interval='1min', output_size='full'):
+        try:
+            alpha_vantage_data = self.get_alpha_vantage_data(symbol, interval, output_size)
+
+            # Adjust column names to match Alpha Vantage data
+            alpha_vantage_data = alpha_vantage_data.rename(columns={'1. open': 'open', '4. close': 'close', '5. volume': 'volume'})
+
+            long_volume = alpha_vantage_data[alpha_vantage_data['close'] > alpha_vantage_data['open']]['volume'].sum()
+            return long_volume
+        except KeyError:
+            print("Not enough data for long volume calculation.")
+            return None
+
+    def calculate_short_volume(self, symbol, interval='1min', output_size='full'):
+        try:
+            alpha_vantage_data = self.get_alpha_vantage_data(symbol, interval, output_size)
+
+            # Adjust column names to match Alpha Vantage data
+            alpha_vantage_data = alpha_vantage_data.rename(columns={'1. open': 'open', '4. close': 'close', '5. volume': 'volume'})
+
+            short_volume = alpha_vantage_data[alpha_vantage_data['close'] < alpha_vantage_data['open']]['volume'].sum()
+            return short_volume
+        except KeyError:
+            print("Not enough data for short volume calculation.")
+            return None 
+        
+    def calculate_support_resistance_levels(self, df_prices, window=3):
+        if df_prices.empty or len(df_prices) < window:
+            return None  # Return None if there is not enough data for support and resistance calculation
+
+        # Calculate support and resistance levels using rolling minimum and maximum
+        df_prices['support'] = df_prices[self.ticker].rolling(window=window).min()
+        df_prices['resistance'] = df_prices[self.ticker].rolling(window=window).max()
+
+        return df_prices  # Return the updated DataFrame
+    
+    def identify_double_tops_bottoms(self, span='day'):
+        df_historical_prices = self.get_historical_prices(span)
+
+        # Identify peaks and troughs
+        peaks, _ = find_peaks(df_historical_prices[self.ticker])
+        troughs, _ = find_peaks(-df_historical_prices[self.ticker])
+
+        # Check for double tops
+        double_tops = [peak for peak in peaks if peak - 1 in peaks]
+
+        # Check for double bottoms
+        double_bottoms = [trough for trough in troughs if trough - 1 in troughs]
+
+        return double_tops, double_bottoms
+    
+    def identify_triangles(self, span='day', min_length=5):
+        alpha_vantage_data = self.get_alpha_vantage_data(self.ticker, interval='daily', output_size='full')
+
+        # Check if 'high' and 'low' columns exist in the DataFrame
+        if 'high' not in alpha_vantage_data.columns or 'low' not in alpha_vantage_data.columns:
+            print("Error: 'high' and/or 'low' columns not found in historical prices.")
+            return [], []
+
+        # Calculate difference between high and low prices
+        price_diff = alpha_vantage_data['high'] - alpha_vantage_data['low']
+
+        # Find local minima and maxima in the price difference
+        troughs, _ = find_peaks(-price_diff, distance=min_length)
+        peaks, _ = find_peaks(price_diff, distance=min_length)
+
+        # Check for ascending triangles (higher lows)
+        ascending_triangles = [trough for trough in troughs if trough + 1 in troughs]
+
+        # Check for descending triangles (lower highs)
+        descending_triangles = [peak for peak in peaks if peak + 1 in peaks]
+
+        return ascending_triangles, descending_triangles
+        
 if __name__ == "__main__":
     login()
-    
+    print()
+
     stocks = ['AAPL', 'NVDA']
     for stock in stocks:
         stock_info = Stock(stock)
@@ -172,4 +258,52 @@ if __name__ == "__main__":
         rsi_strategy_result = stock_info.implement_rsi_strategy(span='day')
         print(rsi_strategy_result)
 
+        #long_volume = stock_info.calculate_long_volume(stock_info.ticker, interval='1min')
+        #short_volume = stock_info.calculate_short_volume(stock_info.ticker, interval='1min')
+        #print(f' - Long Volume per minute: {long_volume}, Short Volume per minute: {short_volume}')
+
+        # Calculate support and resistance levels
+        df_historical_prices = stock_info.calculate_support_resistance_levels(df_historical_prices)
+
+        # Display support and resistance levels
+        print(f' - Support Level: {df_historical_prices["support"].iloc[-1]}, Resistance Level: {df_historical_prices["resistance"].iloc[-1]}')
+
+        double_tops, double_bottoms = stock_info.identify_double_tops_bottoms(span='day')
+        
+        if double_tops:
+            print(f' - Double Tops: {double_tops}')
+        else:
+            print(' - No Double Tops')
+
+        if double_bottoms:
+            print(f' - Double Bottoms: {double_bottoms}')
+        else:
+            print(' - No Double Bottoms')
+
+        # Identify triangles
+        ascending_triangles, descending_triangles = stock_info.identify_triangles(span='day', min_length=5)
+        
+        if ascending_triangles:
+            print(f' - Ascending Triangles: {ascending_triangles}')
+        else:
+            print(' - No Ascending Triangles')
+
+        if descending_triangles:
+            print(f' - Descending Triangles: {descending_triangles}')
+        else:
+            print(' - No Descending Triangles')
+
+        ascending_triangles, descending_triangles = stock_info.identify_triangles(span='day', min_length=5)
+        
+        if ascending_triangles:
+            print(f' - Ascending Triangles: {ascending_triangles}')
+        else:
+            print(' - No Ascending Triangles')
+
+        if descending_triangles:
+            print(f' - Descending Triangles: {descending_triangles}')
+        else:
+            print(' - No Descending Triangles')
+
+    print()
     logout()
