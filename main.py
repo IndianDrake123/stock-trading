@@ -7,8 +7,8 @@ from alpha_vantage.techindicators import TechIndicators
 from scipy.signal import find_peaks
 
 # Replace 'your_username' and 'your_password' with your actual Robinhood credentials
-username = 'bat9440@nyu.edu'
-password = 'Searglobe85252!'
+username = 'your_username'
+password = 'your_password'
 
 def login(days = 1):
     # Logging in
@@ -145,7 +145,7 @@ class Stock:
         
     def get_alpha_vantage_data(self, symbol, interval='1min', output_size='full'):
         # Replace 'your_alpha_vantage_api_key' with your actual Alpha Vantage API key
-        alpha_vantage_api_key = 'ETLHACFHFGR28X9G'
+        alpha_vantage_api_key = 'your_alpha_vantage_api_key'
         ts = TimeSeries(key=alpha_vantage_api_key, output_format='pandas')
         data, meta_data = ts.get_intraday(symbol=symbol, interval=interval, outputsize=output_size)
 
